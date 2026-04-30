@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Task</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="page-wrapper">
+        <header class="header">
+            <div class="brand">Task Manager</div>
+            <a class="btn btn-secondary" href="/dashboard">Back to Dashboard</a>
+        </header>
+
+        <main class="container auth-card">
+            <h2>Create Task</h2>
+            <p class="intro">Assign a task to a team member and set the deadline.</p>
+            {% if error %}
+                <div class="error-message">{{ error }}</div>
+            {% endif %}
+
+            <form method="POST" class="form-grid">
+                <input type="text" name="title" placeholder="Task Name" value="{{ request.form.title }}" required>
+
+                <select name="assigned_to" required>
+                    <option value="" disabled {% if not selected_assigned_to %}selected{% endif %}>Select assignee</option>
+                    {% for u in users %}
+                        <option value="{{ u.id }}" {% if selected_assigned_to and selected_assigned_to|int == u.id %}selected{% endif %}>{{ u.name }}</option>
+                    {% endfor %}
+                </select>
+
+                <select name="project_id" required>
+                    <option value="" disabled {% if not selected_project_id %}selected{% endif %}>Select project</option>
+                    {% for p in projects %}
+                        <option value="{{ p.id }}" {% if selected_project_id and selected_project_id|int == p.id %}selected{% endif %}>{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+
+                <input type="date" name="deadline" value="{{ request.form.deadline }}">
+                <button class="btn" type="submit">Create Task</button>
+            </form>
+        </main>
+    </div>
+</body>
+</html>"

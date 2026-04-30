@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="page-wrapper">
+        <header class="header">
+            <div class="brand">Task Manager</div>
+        </header>
+
+        <main class="container auth-card">
+            <h2>Create your account</h2>
+            <p class="intro">Join and start organizing tasks with a clean workflow.</p>
+
+            <form method="POST" class="form-grid">
+                <input type="text" name="name" placeholder="Name" required>
+                <input type="email" name="email" placeholder="Email" required>
+                <input type="password" name="password" placeholder="Password" required>
+                <select name="role" required>
+                    <option value="admin">Admin</option>
+                    <option value="member">Member</option>
+                </select>
+                <button class="btn" type="submit">Register</button>
+            </form>
+
+            <p class="small-text">Already registered? <a href="/login">Login here</a></p>
+        </main>
+    </div>
+</body>
+</html>"

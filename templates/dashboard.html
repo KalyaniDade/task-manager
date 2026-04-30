@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="page-wrapper">
+        <header class="header">
+            <div class="brand">Task Manager</div>
+            <div class="nav-actions">
+                {% if session['role'] == 'admin' %}
+                    <a class="btn btn-secondary" href="/create_project">Create Project</a>
+                    <a class="btn btn-secondary" href="/create_task">Create Task</a>
+                {% endif %}
+                <a class="btn btn-secondary" href="/logout">Logout</a>
+            </div>
+        </header>
+
+        <main class="container dashboard-card">
+            <div class="dashboard-top">
+                <div>
+                    <h2>Dashboard</h2>
+                    <p class="intro">Overview of your projects, tasks, and progress.</p>
+                </div>
+            </div>
+
+            <div class="stat-cards">
+                <div class="card">
+                    <h3>Total Tasks</h3>
+                    <p class="stats">{{ total }}</p>
+                </div>
+                <div class="card">
+                    <h3>Completed</h3>
+                    <p class="stats">{{ completed }}</p>
+                </div>
+                <div class="card">
+                    <h3>Pending</h3>
+                    <p class="stats">{{ pending }}</p>
+                </div>
+                <div class="card">
+                    <h3>Overdue</h3>
+                    <p class="stats">{{ overdue }}</p>
+                </div>
+            </div>
+
+            <section class="list-panel">
+                <div class="card">
+                    <h3>Projects</h3>
+                    {% if projects %}
+                        {% for p in projects %}
+                            <div class="panel-item project-meta">
+                                <strong>{{ p.name }}</strong>
+                                <p class="task-meta">Team members: {% if p.members %}{% for member in p.members %}{{ member.name }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}No members assigned{% endif %}</p>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="stats">No projects created yet.</p>
+                    {% endif %}
+                </div>
+
+                <div class="card">
+                    <h3>Tasks</h3>
+                    {% if tasks %}
+                        {% for t in tasks %}
+                            <div class="panel-item">
+                                <strong>{{ t.title }}</strong>
+                                <p class="task-meta">Project: {{ t.project.name if t.project else 'Unknown' }} · Assigned to: {{ t.assignee.name if t.assignee else 'Unknown' }}</p>
+                                <p class="task-meta">Deadline: {{ t.deadline or 'No deadline' }}</p>
+                                <div class="status {{ t.status | lower | replace(' ', '') }}"><span>{{ t.status }}</span></div>
+                                <div class="status-links">
+                                    Update:
+                                    <a href="/update_task/{{ t.id }}/Pending">Pending</a> |
+                                    <a href="/update_task/{{ t.id }}/In Progress">In Progress</a> |
+                                    <a href="/update_task/{{ t.id }}/Completed">Completed</a>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="stats">No tasks created yet.</p>
+                    {% endif %}
+                </div>
+            </section>
+        </main>
+    </div>
+</body>
+</html>"

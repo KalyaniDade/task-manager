@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Project</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="page-wrapper">
+        <header class="header">
+            <div class="brand">Task Manager</div>
+            <a class="btn btn-secondary" href="/dashboard">Back to Dashboard</a>
+        </header>
+
+        <main class="container auth-card">
+            <h2>Create Project</h2>
+            <p class="intro">Add a new project and assign the team members who will work on it.</p>
+            {% if error %}
+                <div class="error-message">{{ error }}</div>
+            {% endif %}
+
+            <form method="POST" class="form-grid">
+                <input type="text" name="name" placeholder="Project Name" required>
+
+                <label for="members">Team Members</label>
+                <select name="members" id="members" multiple size="5" required>
+                    {% for member in members %}
+                        <option value="{{ member.id }}" {% if member.id|string in selected_members %}selected{% endif %}>{{ member.name }}</option>
+                    {% endfor %}
+                </select>
+
+                <button class="btn" type="submit">Create Project</button>
+            </form>
+        </main>
+    </div>
+</body>
+</html>"

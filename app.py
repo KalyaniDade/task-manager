@@ -328,6 +328,8 @@ def api_task_update(task_id):
 def logout():
     session.clear()
     return redirect(url_for('login'))
+with app.app_context():
+    db.create_all()
 
 if __name__ == "__main__":
     with app.app_context():

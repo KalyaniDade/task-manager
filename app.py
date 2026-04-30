@@ -368,13 +368,12 @@ def api_task_update(task_id):
 
     return jsonify({'error': 'Invalid data'}), 400
 
+
+# create tables for Railway (IMPORTANT FIX)
+with app.app_context():
+    db.create_all()
+
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('login'))
-if __name__ == "__main__":
-    with app.app_context():
-        db.create_all()
-    app.run(debug=True)
-    with app.app_context():
-        db.create_all()

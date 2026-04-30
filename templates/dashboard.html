@@ -54,6 +54,9 @@
                             <div class="panel-item project-meta">
                                 <strong>{{ p.name }}</strong>
                                 <p class="task-meta">Team members: {% if p.members %}{% for member in p.members %}{{ member.name }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}No members assigned{% endif %}</p>
+                                {% if session['role'] == 'admin' %}
+                                    <a class="btn btn-secondary" href="/edit_project/{{ p.id }}">Edit Project</a>
+                                {% endif %}
                             </div>
                         {% endfor %}
                     {% else %}

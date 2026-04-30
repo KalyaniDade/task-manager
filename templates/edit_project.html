@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Create Project</title>
+    <title>Edit Project</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -14,14 +14,14 @@
         </header>
 
         <main class="container auth-card">
-            <h2>Create Project</h2>
-            <p class="intro">Add a new project and assign the team members who will work on it.</p>
+            <h2>Edit Project</h2>
+            <p class="intro">Update project name and team members.</p>
             {% if error %}
                 <div class="error-message">{{ error }}</div>
             {% endif %}
 
             <form method="POST" class="form-grid">
-                <input type="text" name="name" placeholder="Project Name" required>
+                <input type="text" name="name" placeholder="Project Name" value="{{ project.name }}" required>
 
                 <label for="members">Team Members (optional)</label>
                 {% if members %}
@@ -30,14 +30,14 @@
                             <option value="{{ member.id }}" {% if member.id|string in selected_members %}selected{% endif %}>{{ member.name }}</option>
                         {% endfor %}
                     </select>
-                    <p class="small-text">Select one or more team members, or leave blank and assign later.</p>
+                    <p class="small-text">Select one or more team members, or leave blank to keep the project unassigned.</p>
                 {% else %}
-                    <p class="small-text">No team members are registered yet. You can create the project now and add members later by registering team member users.</p>
+                    <p class="small-text">No members are available. Register team members before assigning them.</p>
                 {% endif %}
 
-                <button class="btn" type="submit">Create Project</button>
+                <button class="btn" type="submit">Save Project</button>
             </form>
         </main>
     </div>
 </body>
-</html>"
+</html>

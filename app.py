@@ -88,23 +88,24 @@ def register():
     return render_template('register.html', error=error)
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == 'POST':
-        user = User.query.filter_by(
-            email=request.form['email']
-        ).first()
+    if request.method == 'GET':
+        session.clear()
+        return render_template('login.html')
 
-        if user and check_password_hash(user.password, request.form['password']):
-            session['user_id'] = user.id
-            session['role'] = user.role
-            return redirect('/dashboard')
-        else:
-            return "Invalid Credentials"
+    user = User.query.filter_by(
+        email=request.form['email']
+    ).first()
 
-    return render_template('login.html')
+    if user and check_password_hash(user.password, request.form['password']):
+        session['user_id'] = user.id
+        session['role'] = user.role
+        return redirect('/dashboard')
+    else:
+        return "Invalid Credentials"
 
 @app.route('/')
 def index():
-    # Always send the user to login first, even if a previous session cookie exists.
+    session.clear()
     return redirect(url_for('login'))
 
 @app.route('/dashboard')
@@ -155,20 +156,63 @@ def create_project():
 
         if not name:
             error = 'Project name is required.'
-        elif not selected_members:
-            error = 'Select at least one team member for the project.'
         else:
-            users = User.query.filter(User.id.in_(selected_members), User.role == 'member').all()
-            if len(users) != len(selected_members):
-                error = 'One or more selected members are invalid.'
-            else:
+            users = []
+            if selected_members:
+                users = User.query.filter(User.id.in_(selected_members), User.role == 'member').all()
+                if len(users) != len(selected_members):
+                    error = 'One or more selected members are invalid.'
+
+            if not error:
                 project = Project(name=name, created_by=session['user_id'])
-                project.members = users
+                if users:
+                    project.members = users
                 db.session.add(project)
                 db.session.commit()
                 return redirect(url_for('dashboard'))
 
     return render_template('create_project.html', error=error, members=members, selected_members=selected_members)
+
+@app.route('/edit_project/<int:id>', methods=['GET', 'POST'])
+@login_required
+def edit_project(id):
+    if session.get('role') != 'admin':
+        return "Access Denied", 403
+
+    project = Project.query.get(id)
+    if not project:
+        return "Project not found", 404
+
+    members = User.query.filter_by(role='member').all()
+    selected_members = [str(member.id) for member in project.members]
+    error = None
+
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        selected_members = request.form.getlist('members')
+
+        if not name:
+            error = 'Project name is required.'
+        else:
+            users = []
+            if selected_members:
+                users = User.query.filter(User.id.in_(selected_members), User.role == 'member').all()
+                if len(users) != len(selected_members):
+                    error = 'One or more selected members are invalid.'
+
+            if not error:
+                project.name = name
+                project.members = users
+                db.session.commit()
+                return redirect(url_for('dashboard'))
+
+    return render_template(
+        'edit_project.html',
+        project=project,
+        members=members,
+        selected_members=selected_members,
+        error=error
+    )
 
 @app.route('/create_task', methods=['GET', 'POST'])
 @login_required
@@ -328,9 +372,6 @@ def api_task_update(task_id):
 def logout():
     session.clear()
     return redirect(url_for('login'))
-with app.app_context():
-    db.create_all()
-
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()

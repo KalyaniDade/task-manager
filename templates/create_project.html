@@ -21,20 +21,10 @@
             {% endif %}
 
             <form method="POST" class="form-grid">
-                <input type="text" name="name" placeholder="Project Name" required>
+                <input type="text" name="name" placeholder="Project Name" value="{{ request.form.name or '' }}" required>
+                <textarea name="description" rows="4" placeholder="Project Description">{{ request.form.description or description or '' }}</textarea>
 
-                <label for="members">Team Members (optional)</label>
-                {% if members %}
-                    <select name="members" id="members" multiple size="5">
-                        {% for member in members %}
-                            <option value="{{ member.id }}" {% if member.id|string in selected_members %}selected{% endif %}>{{ member.name }}</option>
-                        {% endfor %}
-                    </select>
-                    <p class="small-text">Select one or more team members, or leave blank and assign later.</p>
-                {% else %}
-                    <p class="small-text">No team members are registered yet. You can create the project now and add members later by registering team member users.</p>
-                {% endif %}
-
+                <p class="small-text">Team members can be added later through project management.</p>
                 <button class="btn" type="submit">Create Project</button>
             </form>
         </main>

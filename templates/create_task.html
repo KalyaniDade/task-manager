@@ -15,32 +15,82 @@
 
         <main class="container auth-card">
             <h2>Create Task</h2>
-            <p class="intro">Assign a task to a team member and set the deadline.</p>
+            <p class="intro">Enter the task name, optional description, choose a project, then assign to a team member.</p>
             {% if error %}
                 <div class="error-message">{{ error }}</div>
             {% endif %}
 
             <form method="POST" class="form-grid">
-                <input type="text" name="title" placeholder="Task Name" value="{{ request.form.title }}" required>
+                <input type="text" name="title" placeholder="Task Name" value="{{ title or '' }}" required>
+                <textarea name="description" rows="4" placeholder="Task Description">{{ description or '' }}</textarea>
 
-                <select name="assigned_to" required>
-                    <option value="" disabled {% if not selected_assigned_to %}selected{% endif %}>Select assignee</option>
-                    {% for u in users %}
-                        <option value="{{ u.id }}" {% if selected_assigned_to and selected_assigned_to|int == u.id %}selected{% endif %}>{{ u.name }}</option>
-                    {% endfor %}
-                </select>
-
-                <select name="project_id" required>
+                <select name="project_id" id="project-select" required>
                     <option value="" disabled {% if not selected_project_id %}selected{% endif %}>Select project</option>
                     {% for p in projects %}
                         <option value="{{ p.id }}" {% if selected_project_id and selected_project_id|int == p.id %}selected{% endif %}>{{ p.name }}</option>
                     {% endfor %}
                 </select>
 
-                <input type="date" name="deadline" value="{{ request.form.deadline }}">
-                <button class="btn" type="submit">Create Task</button>
+                <select name="assigned_to" id="assigned-select" required disabled>
+                    <option value="">Select a project first</option>
+                </select>
+                <p id="member-warning" class="small-text"></p>
+
+                <input type="date" name="due_date" value="{{ due_date or '' }}">
+                <button class="btn" type="submit" id="submit-task">Create Task</button>
             </form>
         </main>
     </div>
+
+    <script>
+        const projectMembers = {{ project_members_map | tojson }};
+        const projectSelect = document.getElementById('project-select');
+        const assignedSelect = document.getElementById('assigned-select');
+        const warning = document.getElementById('member-warning');
+        const submitButton = document.getElementById('submit-task');
+        const selectedProjectId = '{{ selected_project_id or '' }}';
+        const selectedAssigned = '{{ selected_assigned_to or '' }}';
+
+        function updateAssignees() {
+            const projectId = projectSelect.value;
+            assignedSelect.innerHTML = '';
+            warning.textContent = '';
+            assignedSelect.disabled = true;
+            submitButton.disabled = false;
+
+            if (!projectId) {
+                assignedSelect.innerHTML = '<option value="">Select a project first</option>';
+                submitButton.disabled = true;
+                return;
+            }
+
+            const members = projectMembers[projectId] || [];
+            if (members.length === 0) {
+                assignedSelect.innerHTML = '<option value="">There are no team members to assign the task. Please add team members and assign the task.</option>';
+                warning.textContent = 'There are no team members to assign the task. Please add team members and assign the task.';
+                submitButton.disabled = true;
+                return;
+            }
+
+            assignedSelect.disabled = false;
+            assignedSelect.innerHTML = '<option value="" disabled>Select assignee</option>';
+            members.forEach(member => {
+                const option = document.createElement('option');
+                option.value = member.id;
+                option.textContent = member.name;
+                if (selectedAssigned === String(member.id)) {
+                    option.selected = true;
+                }
+                assignedSelect.appendChild(option);
+            });
+        }
+
+        projectSelect.addEventListener('change', updateAssignees);
+        updateAssignees();
+        if (selectedProjectId) {
+            projectSelect.value = selectedProjectId;
+            updateAssignees();
+        }
+    </script>
 </body>
 </html>"

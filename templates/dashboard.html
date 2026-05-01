@@ -30,54 +30,64 @@
             <div class="stat-cards">
                 <div class="card">
                     <h3>Total Tasks</h3>
-                    <p class="stats">{{ total }}</p>
+                    <p class="stats">{{ stats.total }}</p>
+                </div>
+                <div class="card">
+                    <h3>To Do</h3>
+                    <p class="stats">{{ stats.to_do }}</p>
+                </div>
+                <div class="card">
+                    <h3>In Progress</h3>
+                    <p class="stats">{{ stats.in_progress }}</p>
                 </div>
                 <div class="card">
                     <h3>Completed</h3>
-                    <p class="stats">{{ completed }}</p>
-                </div>
-                <div class="card">
-                    <h3>Pending</h3>
-                    <p class="stats">{{ pending }}</p>
+                    <p class="stats">{{ stats.completed }}</p>
                 </div>
                 <div class="card">
                     <h3>Overdue</h3>
-                    <p class="stats">{{ overdue }}</p>
+                    <p class="stats">{{ stats.overdue }}</p>
                 </div>
             </div>
 
             <section class="list-panel">
-                <div class="card">
-                    <h3>Projects</h3>
-                    {% if projects %}
-                        {% for p in projects %}
-                            <div class="panel-item project-meta">
-                                <strong>{{ p.name }}</strong>
-                                <p class="task-meta">Team members: {% if p.members %}{% for member in p.members %}{{ member.name }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}No members assigned{% endif %}</p>
-                                {% if session['role'] == 'admin' %}
-                                    <a class="btn btn-secondary" href="/edit_project/{{ p.id }}">Edit Project</a>
-                                {% endif %}
-                            </div>
-                        {% endfor %}
-                    {% else %}
-                        <p class="stats">No projects created yet.</p>
-                    {% endif %}
-                </div>
+                {% if role == 'admin' %}
+                    <div class="card">
+                        <h3>Projects</h3>
+                        {% if projects %}
+                            {% for p in projects %}
+                                <div class="panel-item project-meta">
+                                    <strong>{{ p.name }}</strong>
+                                    <p class="task-meta">{{ p.description or 'No description provided' }}</p>
+                                    <p class="task-meta">Team members: {% if p.members | length > 0 %}{% for member in p.members %}{{ member.name }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}No members assigned{% endif %}</p>
+                                    <div class="status-links">
+                                        <a class="btn btn-secondary" href="/edit_project/{{ p.id }}">Edit</a>
+                                        <a class="btn btn-secondary" href="/projects/{{ p.id }}/members">Manage Team</a>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="stats">No projects created yet.</p>
+                        {% endif %}
+                    </div>
+                {% endif %}
 
                 <div class="card">
                     <h3>Tasks</h3>
                     {% if tasks %}
                         {% for t in tasks %}
-                            <div class="panel-item">
+                            <div class="panel-item {% if t.due_date and t.due_date < today and t.status != 'Completed' %}overdue{% endif %}">
                                 <strong>{{ t.title }}</strong>
                                 <p class="task-meta">Project: {{ t.project.name if t.project else 'Unknown' }} · Assigned to: {{ t.assignee.name if t.assignee else 'Unknown' }}</p>
-                                <p class="task-meta">Deadline: {{ t.deadline or 'No deadline' }}</p>
+                                <p class="task-meta">Deadline: {{ t.due_date.isoformat() if t.due_date else 'No deadline' }}</p>
                                 <div class="status {{ t.status | lower | replace(' ', '') }}"><span>{{ t.status }}</span></div>
                                 <div class="status-links">
-                                    Update:
-                                    <a href="/update_task/{{ t.id }}/Pending">Pending</a> |
-                                    <a href="/update_task/{{ t.id }}/In Progress">In Progress</a> |
-                                    <a href="/update_task/{{ t.id }}/Completed">Completed</a>
+                                    {% if role == 'admin' or session['user_id'] == t.assigned_to %}
+                                        Update:
+                                        <a href="/update_task/{{ t.id }}/To Do">To Do</a> |
+                                        <a href="/update_task/{{ t.id }}/In Progress">In Progress</a> |
+                                        <a href="/update_task/{{ t.id }}/Completed">Completed</a>
+                                    {% endif %}
                                 </div>
                             </div>
                         {% endfor %}

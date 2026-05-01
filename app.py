@@ -1,5 +1,6 @@
 from flask import session, Flask, render_template, request, redirect, jsonify, url_for
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from datetime import datetime, date
@@ -12,38 +13,54 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-project_members = db.Table(
-    'project_members',
-    db.Column('project_id', db.Integer, db.ForeignKey('project.id'), primary_key=True),
-    db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True)
-)
-
 # ---------------- MODELS ---------------- #
+
+class ProjectMember(db.Model):
+    __tablename__ = 'project_member'
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+
+    project = db.relationship('Project', back_populates='memberships')
+    user = db.relationship('User', back_populates='project_memberships')
+
+    __table_args__ = (
+        db.UniqueConstraint('project_id', 'user_id', name='uq_project_user'),
+    )
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100))
-    email = db.Column(db.String(100), unique=True)
-    password = db.Column(db.String(100))
-    role = db.Column(db.String(20))  # admin / member
-    tasks = db.relationship('Task', backref='assignee', lazy=True, foreign_keys='Task.assigned_to')
-    projects = db.relationship('Project', secondary=project_members, back_populates='members')
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(100), unique=True, nullable=False)
+    password = db.Column(db.String(255), nullable=False)
+    role = db.Column(db.String(20), nullable=False)
+
+    tasks = db.relationship('Task', back_populates='assignee', lazy=True, foreign_keys='Task.assigned_to')
+    project_memberships = db.relationship('ProjectMember', back_populates='user', cascade='all, delete-orphan', lazy=True)
+    projects = db.relationship('Project', secondary='project_member', back_populates='members')
 
 class Project(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100))
-    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+
     creator = db.relationship('User', foreign_keys=[created_by])
-    members = db.relationship('User', secondary=project_members, back_populates='projects')
-    tasks = db.relationship('Task', backref='project', lazy=True)
+    memberships = db.relationship('ProjectMember', back_populates='project', cascade='all, delete-orphan', lazy=True)
+    members = db.relationship('User', secondary='project_member', back_populates='projects')
+    tasks = db.relationship('Task', back_populates='project', lazy=True)
 
 class Task(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(100))
-    status = db.Column(db.String(50))
-    assigned_to = db.Column(db.Integer, db.ForeignKey('user.id'))
-    project_id = db.Column(db.Integer, db.ForeignKey('project.id'))
-    deadline = db.Column(db.String(50))
+    title = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(50), nullable=False, default='To Do')
+    assigned_to = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    due_date = db.Column(db.Date, nullable=True)
+
+    assignee = db.relationship('User', back_populates='tasks', foreign_keys=[assigned_to])
+    project = db.relationship('Project', back_populates='tasks')
 
 def login_required(f):
     @wraps(f)
@@ -60,6 +77,20 @@ def api_login_required(f):
             return jsonify({'error': 'Authentication required'}), 401
         return f(*args, **kwargs)
     return decorated_function
+
+
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if session.get('role') != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def get_current_user():
+    user_id = session.get('user_id')
+    return User.query.get(user_id) if user_id else None
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -121,57 +152,52 @@ def dashboard():
         projects = Project.query.filter(Project.members.any(id=user_id)).all()
         tasks = Task.query.filter_by(assigned_to=user_id).all()
 
-    total = len(tasks)
-    completed = len([t for t in tasks if t.status == "Completed"])
-    pending = len([t for t in tasks if t.status == "Pending"])
-
     today = date.today()
-    overdue = len([
+    overdue_tasks = [
         t for t in tasks
-        if t.deadline and datetime.strptime(t.deadline, '%Y-%m-%d').date() < today and t.status != "Completed"
-    ])
+        if t.due_date and t.due_date < today and t.status != 'Completed'
+    ]
+
+    stats = {
+        'total': len(tasks),
+        'to_do': len([t for t in tasks if t.status == 'To Do']),
+        'in_progress': len([t for t in tasks if t.status == 'In Progress']),
+        'completed': len([t for t in tasks if t.status == 'Completed']),
+        'overdue': len(overdue_tasks)
+    }
 
     return render_template(
         'dashboard.html',
         projects=projects,
         tasks=tasks,
-        total=total,
-        completed=completed,
-        pending=pending,
-        overdue=overdue
+        stats=stats,
+        overdue_tasks=overdue_tasks,
+        role=role,
+        today=today
     )
+
 @app.route('/create_project', methods=['GET', 'POST'])
 @login_required
 def create_project():
     if session.get('role') != 'admin':
         return "Access Denied", 403
 
-    members = User.query.filter_by(role='member').all()
     error = None
-    selected_members = []
+    description = ''
 
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
-        selected_members = request.form.getlist('members')
+        description = request.form.get('description', '').strip()
 
         if not name:
             error = 'Project name is required.'
         else:
-            users = []
-            if selected_members:
-                users = User.query.filter(User.id.in_(selected_members), User.role == 'member').all()
-                if len(users) != len(selected_members):
-                    error = 'One or more selected members are invalid.'
+            project = Project(name=name, description=description, created_by=session['user_id'])
+            db.session.add(project)
+            db.session.commit()
+            return redirect(url_for('dashboard'))
 
-            if not error:
-                project = Project(name=name, created_by=session['user_id'])
-                if users:
-                    project.members = users
-                db.session.add(project)
-                db.session.commit()
-                return redirect(url_for('dashboard'))
-
-    return render_template('create_project.html', error=error, members=members, selected_members=selected_members)
+    return render_template('create_project.html', error=error, description=description)
 
 @app.route('/edit_project/<int:id>', methods=['GET', 'POST'])
 @login_required
@@ -183,36 +209,79 @@ def edit_project(id):
     if not project:
         return "Project not found", 404
 
-    members = User.query.filter_by(role='member').all()
-    selected_members = [str(member.id) for member in project.members]
     error = None
 
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
-        selected_members = request.form.getlist('members')
+        description = request.form.get('description', '').strip()
 
         if not name:
             error = 'Project name is required.'
         else:
-            users = []
-            if selected_members:
-                users = User.query.filter(User.id.in_(selected_members), User.role == 'member').all()
-                if len(users) != len(selected_members):
-                    error = 'One or more selected members are invalid.'
-
-            if not error:
-                project.name = name
-                project.members = users
-                db.session.commit()
-                return redirect(url_for('dashboard'))
+            project.name = name
+            project.description = description
+            db.session.commit()
+            return redirect(url_for('dashboard'))
 
     return render_template(
         'edit_project.html',
         project=project,
-        members=members,
-        selected_members=selected_members,
         error=error
     )
+
+@app.route('/projects/<int:project_id>/members', methods=['GET'])
+@login_required
+def project_members_page(project_id):
+    if session.get('role') != 'admin':
+        return "Access Denied", 403
+
+    project = Project.query.get(project_id)
+    if not project:
+        return "Project not found", 404
+
+    members = project.members
+    member_ids = [member.id for member in members]
+    available_users = User.query.filter(User.role == 'member', ~User.id.in_(member_ids)).all()
+    return render_template('manage_members.html', project=project, members=members, available_users=available_users)
+
+@app.route('/projects/<int:project_id>/add-member', methods=['POST'])
+@login_required
+def add_project_member(project_id):
+    if session.get('role') != 'admin':
+        return "Access Denied", 403
+
+    project = Project.query.get(project_id)
+    if not project:
+        return "Project not found", 404
+
+    user_id = request.form.get('user_id')
+    user = User.query.filter_by(id=user_id, role='member').first() if user_id else None
+    if not user:
+        return redirect(url_for('project_members_page', project_id=project_id))
+
+    if user not in project.members:
+        project.members.append(user)
+        db.session.commit()
+
+    return redirect(url_for('project_members_page', project_id=project_id))
+
+@app.route('/projects/<int:project_id>/remove-member', methods=['POST'])
+@login_required
+def remove_project_member(project_id):
+    if session.get('role') != 'admin':
+        return "Access Denied", 403
+
+    project = Project.query.get(project_id)
+    if not project:
+        return "Project not found", 404
+
+    user_id = request.form.get('user_id')
+    user = User.query.filter_by(id=user_id, role='member').first() if user_id else None
+    if user and user in project.members:
+        project.members.remove(user)
+        db.session.commit()
+
+    return redirect(url_for('project_members_page', project_id=project_id))
 
 @app.route('/create_task', methods=['GET', 'POST'])
 @login_required
@@ -220,47 +289,56 @@ def create_task():
     if session.get('role') != 'admin':
         return "Access Denied", 403
 
-    users = User.query.filter_by(role='member').all()
     projects = Project.query.all()
+    project_members_map = {
+        p.id: [{'id': m.id, 'name': m.name} for m in p.members]
+        for p in projects
+    }
+
     error = None
+    title = ''
+    description = ''
     selected_assigned_to = None
     selected_project_id = None
+    deadline_str = None
 
     if request.method == 'POST':
         title = request.form.get('title', '').strip()
-        assigned_to = request.form.get('assigned_to')
-        project_id = request.form.get('project_id')
-        deadline_str = request.form.get('deadline')
-        selected_assigned_to = assigned_to
-        selected_project_id = project_id
+        description = request.form.get('description', '').strip()
+        selected_assigned_to = request.form.get('assigned_to')
+        selected_project_id = request.form.get('project_id')
+        deadline_str = request.form.get('due_date')
 
-        if not title or not assigned_to or not project_id:
-            error = 'Title, assignee, and project are required.'
+        if not title or not selected_assigned_to or not selected_project_id:
+            error = 'Title, project, and assignee are required.'
         else:
-            assignee = User.query.get(int(assigned_to)) if assigned_to.isdigit() else None
-            project = Project.query.get(int(project_id)) if project_id.isdigit() else None
-            if not assignee or not project:
-                error = 'Invalid assignee or project.'
-            elif assignee.role != 'member':
-                error = 'Tasks must be assigned to team members.'
+            project = Project.query.get(int(selected_project_id)) if selected_project_id.isdigit() else None
+            assignee = User.query.get(int(selected_assigned_to)) if selected_assigned_to.isdigit() else None
+
+            if not project:
+                error = 'Selected project is invalid.'
+            elif not assignee or assignee.role != 'member':
+                error = 'Selected assignee is invalid.'
             elif assignee not in project.members:
                 error = 'Assignee must be a member of the selected project.'
             else:
+                due_date = None
                 if deadline_str:
                     try:
-                        deadline = datetime.strptime(deadline_str, '%Y-%m-%d').date()
-                        if deadline < date.today():
-                            error = 'Deadline must be in the future.'
+                        due_date = datetime.strptime(deadline_str, '%Y-%m-%d').date()
+                        if due_date < date.today():
+                            error = 'Due date must not be in the past.'
                     except ValueError:
-                        error = 'Invalid deadline format.'
+                        error = 'Invalid due date format.'
 
         if not error:
             task = Task(
                 title=title,
-                status="Pending",
-                assigned_to=int(assigned_to),
-                project_id=int(project_id),
-                deadline=deadline_str
+                description=description,
+                status='To Do',
+                assigned_to=int(selected_assigned_to),
+                project_id=int(selected_project_id),
+                due_date=due_date
             )
             db.session.add(task)
             db.session.commit()
@@ -268,11 +346,14 @@ def create_task():
 
     return render_template(
         'create_task.html',
-        users=users,
         projects=projects,
         error=error,
         selected_assigned_to=selected_assigned_to,
-        selected_project_id=selected_project_id
+        selected_project_id=selected_project_id,
+        title=title,
+        description=description,
+        due_date=deadline_str,
+        project_members_map=project_members_map
     )
 
 @app.route('/update_task/<int:id>/<status>')
@@ -282,7 +363,7 @@ def update_task(id, status):
     if not task:
         return "Task not found", 404
 
-    allowed_statuses = ['Pending', 'In Progress', 'Completed']
+    allowed_statuses = ['To Do', 'In Progress', 'Completed']
     if status not in allowed_statuses:
         return 'Invalid status', 400
 
@@ -293,6 +374,45 @@ def update_task(id, status):
     db.session.commit()
     return redirect(url_for('dashboard'))
 
+@app.route('/api/auth/register', methods=['POST'])
+def api_auth_register():
+    data = request.get_json() or {}
+    name = data.get('name', '').strip()
+    email = data.get('email', '').strip().lower()
+    password = data.get('password', '')
+    role = data.get('role')
+
+    if not name or not email or not password or role not in ['admin', 'member']:
+        return jsonify({'error': 'All fields are required and role must be admin or member.'}), 400
+
+    if User.query.filter_by(email=email).first():
+        return jsonify({'error': 'Email already registered.'}), 400
+
+    user = User(name=name, email=email, password=generate_password_hash(password), role=role)
+    db.session.add(user)
+    db.session.commit()
+    return jsonify({'message': 'Registered successfully', 'id': user.id}), 201
+
+@app.route('/api/auth/login', methods=['POST'])
+def api_auth_login():
+    data = request.get_json() or {}
+    email = data.get('email', '').strip().lower()
+    password = data.get('password', '')
+
+    user = User.query.filter_by(email=email).first()
+    if user and check_password_hash(user.password, password):
+        session['user_id'] = user.id
+        session['role'] = user.role
+        return jsonify({'message': 'Logged in successfully'}), 200
+
+    return jsonify({'error': 'Invalid credentials'}), 401
+
+@app.route('/api/auth/logout', methods=['POST'])
+@api_login_required
+def api_auth_logout():
+    session.clear()
+    return jsonify({'message': 'Logged out successfully'}), 200
+
 @app.route('/api/users', methods=['GET'])
 @api_login_required
 def api_users():
@@ -300,8 +420,7 @@ def api_users():
         return jsonify({'error': 'Access denied'}), 403
 
     users = User.query.all()
-    data = [{'id': u.id, 'name': u.name, 'email': u.email, 'role': u.role} for u in users]
-    return jsonify(data)
+    return jsonify([{'id': u.id, 'name': u.name, 'email': u.email, 'role': u.role} for u in users])
 
 @app.route('/api/projects', methods=['GET', 'POST'])
 @api_login_required
@@ -310,15 +429,83 @@ def api_projects():
         if session.get('role') != 'admin':
             return jsonify({'error': 'Access denied'}), 403
 
-        data = request.get_json()
-        project = Project(name=data['name'], created_by=session['user_id'])
+        data = request.get_json() or {}
+        name = (data.get('name') or '').strip()
+        description = (data.get('description') or '').strip()
+
+        if not name:
+            return jsonify({'error': 'Project name is required.'}), 400
+
+        project = Project(name=name, description=description, created_by=session['user_id'])
         db.session.add(project)
         db.session.commit()
         return jsonify({'message': 'Project created', 'id': project.id}), 201
 
-    projects = Project.query.all()
-    data = [{'id': p.id, 'name': p.name, 'created_by': p.creator.name if p.creator else None} for p in projects]
+    if session.get('role') == 'admin':
+        projects = Project.query.all()
+    else:
+        projects = Project.query.filter(Project.members.any(id=session['user_id'])).all()
+
+    data = [{
+        'id': p.id,
+        'name': p.name,
+        'description': p.description,
+        'created_by': p.creator.name if p.creator else None,
+        'members': [{'id': u.id, 'name': u.name} for u in p.members]
+    } for p in projects]
     return jsonify(data)
+
+@app.route('/api/projects/<int:project_id>/members', methods=['GET'])
+@api_login_required
+@admin_required
+def api_project_members(project_id):
+    project = Project.query.get(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    members = [{'id': u.id, 'name': u.name, 'email': u.email} for u in project.members]
+    available = [{'id': u.id, 'name': u.name, 'email': u.email} for u in User.query.filter_by(role='member').all()]
+    return jsonify({'project_id': project.id, 'members': members, 'available_members': available})
+
+@app.route('/api/projects/<int:project_id>/add-member', methods=['POST'])
+@api_login_required
+@admin_required
+def api_add_project_member(project_id):
+    project = Project.query.get(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    data = request.get_json() or {}
+    user_id = data.get('user_id')
+    user = User.query.filter_by(id=user_id, role='member').first()
+    if not user:
+        return jsonify({'error': 'User not found or invalid member'}), 400
+
+    if user not in project.members:
+        project.members.append(user)
+        db.session.commit()
+
+    return jsonify({'message': 'Member added'}), 200
+
+@app.route('/api/projects/<int:project_id>/remove-member', methods=['POST'])
+@api_login_required
+@admin_required
+def api_remove_project_member(project_id):
+    project = Project.query.get(project_id)
+    if not project:
+        return jsonify({'error': 'Project not found'}), 404
+
+    data = request.get_json() or {}
+    user_id = data.get('user_id')
+    user = User.query.filter_by(id=user_id, role='member').first()
+    if not user:
+        return jsonify({'error': 'User not found or invalid member'}), 400
+
+    if user in project.members:
+        project.members.remove(user)
+        db.session.commit()
+
+    return jsonify({'message': 'Member removed'}), 200
 
 @app.route('/api/tasks', methods=['GET', 'POST'])
 @api_login_required
@@ -327,26 +514,52 @@ def api_tasks():
         if session.get('role') != 'admin':
             return jsonify({'error': 'Access denied'}), 403
 
-        data = request.get_json()
+        data = request.get_json() or {}
+        title = (data.get('title') or '').strip()
+        project_id = data.get('project_id')
+        assigned_to = data.get('assigned_to')
+        due_date = data.get('due_date')
+        description = data.get('description', '').strip()
+
+        project = Project.query.get(project_id)
+        assignee = User.query.get(assigned_to)
+        if not title or not project or not assignee:
+            return jsonify({'error': 'Title, project, and valid assignee are required.'}), 400
+        if assignee.role != 'member' or assignee not in project.members:
+            return jsonify({'error': 'Assignee must be a project team member.'}), 400
+
+        parsed_due_date = None
+        if due_date:
+            try:
+                parsed_due_date = datetime.strptime(due_date, '%Y-%m-%d').date()
+            except ValueError:
+                return jsonify({'error': 'Invalid due date format.'}), 400
+
         task = Task(
-            title=data['title'],
-            status='Pending',
-            assigned_to=data['assigned_to'],
-            project_id=data['project_id'],
-            deadline=data.get('deadline')
+            title=title,
+            description=description,
+            status='To Do',
+            assigned_to=assigned_to,
+            project_id=project_id,
+            due_date=parsed_due_date
         )
         db.session.add(task)
         db.session.commit()
         return jsonify({'message': 'Task created', 'id': task.id}), 201
 
-    tasks = Task.query.all()
+    if session.get('role') == 'admin':
+        tasks = Task.query.all()
+    else:
+        tasks = Task.query.filter_by(assigned_to=session['user_id']).all()
+
     data = [{
         'id': t.id,
         'title': t.title,
+        'description': t.description,
         'status': t.status,
         'assigned_to': t.assignee.name if t.assignee else None,
         'project': t.project.name if t.project else None,
-        'deadline': t.deadline
+        'due_date': t.due_date.isoformat() if t.due_date else None
     } for t in tasks]
     return jsonify(data)
 
@@ -360,8 +573,8 @@ def api_task_update(task_id):
     if session.get('role') != 'admin' and task.assigned_to != session.get('user_id'):
         return jsonify({'error': 'Access denied'}), 403
 
-    data = request.get_json()
-    if 'status' in data and data['status'] in ['Pending', 'In Progress', 'Completed']:
+    data = request.get_json() or {}
+    if 'status' in data and data['status'] in ['To Do', 'In Progress', 'Completed']:
         task.status = data['status']
         db.session.commit()
         return jsonify({'message': 'Task updated'}), 200
@@ -373,7 +586,27 @@ def api_task_update(task_id):
 with app.app_context():
     db.create_all()
 
+    if db.engine.dialect.name == 'sqlite':
+        conn = db.engine.connect()
+        try:
+            project_info = conn.execute(text("PRAGMA table_info(project)"))
+            project_columns = {row[1] for row in project_info}
+            if 'description' not in project_columns:
+                conn.execute(text("ALTER TABLE project ADD COLUMN description TEXT"))
+
+            task_info = conn.execute(text("PRAGMA table_info(task)"))
+            task_columns = {row[1] for row in task_info}
+            if 'due_date' not in task_columns:
+                conn.execute(text("ALTER TABLE task ADD COLUMN due_date DATE"))
+            if 'description' not in task_columns:
+                conn.execute(text("ALTER TABLE task ADD COLUMN description TEXT"))
+        finally:
+            conn.close()
+
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('login'))
+
+if __name__ == '__main__':
+    app.run(debug=True)

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Project Team</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="page-wrapper">
+        <header class="header">
+            <div class="brand">Task Manager</div>
+            <div class="nav-actions">
+                <a class="btn btn-secondary" href="/dashboard">Back to Dashboard</a>
+                <a class="btn btn-secondary" href="/logout">Logout</a>
+            </div>
+        </header>
+
+        <main class="container auth-card">
+            <h2>Manage Team for {{ project.name }}</h2>
+            <p class="intro">Add or remove registered members for this project.</p>
+
+            <div class="form-card">
+                <h3>Current Team Members</h3>
+                {% if members %}
+                    {% for member in members %}
+                        <div class="panel-item">
+                            <strong>{{ member.name }}</strong>
+                            <p class="task-meta">{{ member.email }}</p>
+                            <form method="POST" action="/projects/{{ project.id }}/remove-member" style="margin-top: 10px;">
+                                <input type="hidden" name="user_id" value="{{ member.id }}">
+                                <button class="btn btn-secondary" type="submit">Remove from Project</button>
+                            </form>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="stats">No team members are assigned to this project yet.</p>
+                {% endif %}
+            </div>
+
+            <div class="form-card" style="margin-top: 20px;">
+                <h3>Add Member to Project</h3>
+                {% if available_users %}
+                    <form method="POST" action="/projects/{{ project.id }}/add-member" class="form-grid">
+                        <select name="user_id" required>
+                            <option value="" disabled selected>Select a member to add</option>
+                            {% for user in available_users %}
+                                <option value="{{ user.id }}">{{ user.name }} ({{ user.email }})</option>
+                            {% endfor %}
+                        </select>
+                        <button class="btn" type="submit">Add Member</button>
+                    </form>
+                {% else %}
+                    <p class="small-text">No available members to add. Register new members first or remove existing members.</p>
+                {% endif %}
+            </div>
+        </main>
+    </div>
+</body>
+</html>

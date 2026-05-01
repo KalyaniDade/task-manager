@@ -21,20 +21,10 @@
             {% endif %}
 
             <form method="POST" class="form-grid">
-                <input type="text" name="name" placeholder="Project Name" value="{{ project.name }}" required>
+                <input type="text" name="name" placeholder="Project Name" value="{{ request.form.name or project.name }}" required>
+                <textarea name="description" rows="4" placeholder="Project Description">{{ request.form.description or project.description or '' }}</textarea>
 
-                <label for="members">Team Members (optional)</label>
-                {% if members %}
-                    <select name="members" id="members" multiple size="5">
-                        {% for member in members %}
-                            <option value="{{ member.id }}" {% if member.id|string in selected_members %}selected{% endif %}>{{ member.name }}</option>
-                        {% endfor %}
-                    </select>
-                    <p class="small-text">Select one or more team members, or leave blank to keep the project unassigned.</p>
-                {% else %}
-                    <p class="small-text">No members are available. Register team members before assigning them.</p>
-                {% endif %}
-
+                <p class="small-text">Update project details here. Manage team members separately from the dashboard.</p>
                 <button class="btn" type="submit">Save Project</button>
             </form>
         </main>

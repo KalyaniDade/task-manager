@@ -295,6 +295,27 @@ button:hover {
     border: 1px solid #fecaca;
 }
 
+.warning-box {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px 18px;
+    border-radius: 18px;
+    background: #fff4e5;
+    border: 1px solid #fbbf24;
+    margin-bottom: 16px;
+}
+
+.warning-text {
+    margin: 0;
+    color: #92400e;
+    font-weight: 600;
+}
+
+.hidden {
+    display: none;
+}
+
 .form-card {
     padding: 24px;
     border-radius: 24px;

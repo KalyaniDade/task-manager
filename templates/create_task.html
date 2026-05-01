@@ -34,7 +34,11 @@
                 <select name="assigned_to" id="assigned-select" required disabled>
                     <option value="">Select a project first</option>
                 </select>
-                <p id="member-warning" class="small-text"></p>
+
+                <div id="member-warning-box" class="warning-box hidden">
+                    <p class="warning-text">⚠️ Add team members to this project before creating tasks.</p>
+                    <a id="add-members-link" class="btn btn-secondary" href="#">Go to Add Members</a>
+                </div>
 
                 <input type="date" name="due_date" value="{{ due_date or '' }}">
                 <button class="btn" type="submit" id="submit-task">Create Task</button>
@@ -46,7 +50,8 @@
         const projectMembers = {{ project_members_map | tojson }};
         const projectSelect = document.getElementById('project-select');
         const assignedSelect = document.getElementById('assigned-select');
-        const warning = document.getElementById('member-warning');
+        const memberWarningBox = document.getElementById('member-warning-box');
+        const addMembersLink = document.getElementById('add-members-link');
         const submitButton = document.getElementById('submit-task');
         const selectedProjectId = '{{ selected_project_id or '' }}';
         const selectedAssigned = '{{ selected_assigned_to or '' }}';
@@ -54,12 +59,13 @@
         function updateAssignees() {
             const projectId = projectSelect.value;
             assignedSelect.innerHTML = '';
-            warning.textContent = '';
             assignedSelect.disabled = true;
             submitButton.disabled = false;
 
             if (!projectId) {
                 assignedSelect.innerHTML = '<option value="">Select a project first</option>';
+                memberWarningBox.classList.add('hidden');
+                addMembersLink.href = '#';
                 submitButton.disabled = true;
                 return;
             }
@@ -67,11 +73,13 @@
             const members = projectMembers[projectId] || [];
             if (members.length === 0) {
                 assignedSelect.innerHTML = '<option value="">There are no team members to assign the task. Please add team members and assign the task.</option>';
-                warning.textContent = 'There are no team members to assign the task. Please add team members and assign the task.';
+                memberWarningBox.classList.remove('hidden');
+                addMembersLink.href = `/projects/${projectId}/members`;
                 submitButton.disabled = true;
                 return;
             }
 
+            memberWarningBox.classList.add('hidden');
             assignedSelect.disabled = false;
             assignedSelect.innerHTML = '<option value="" disabled>Select assignee</option>';
             members.forEach(member => {
